@@ -1,78 +1,67 @@
 ## UE4Dumper(Unreal Engine 4 Dumper)
-Unreal Engine 4 Dumper for Android Devices, Dump Lib libUE4.so from Memory of Game Process and Generate Structure SDK of Supported Game in Android. You can Find Latest Dumped SDK from [HERE](https://github.com/kp7742/UE4Dumper/tree/master/SDKs/)
+Unreal Engine 4 Dumper for Android Devices, Dump Lib libUE4.so from Memory of Game Process and Generate Structure SDK of Supported Game in Android. You can Find Latest Dumped SDK from [HERE]
 
-## Changelog
-- v0.21:
-    - 1) Merged code from private repo
-    - 2) Added Support for Farlight84 Mobile
-    - 3) Improved UTF16 to UTF8 string conversion
-    - 4) And in the end, this is probably last and final update of UE4Dumper
-- v0.20:
-    - 1) Few more improvements to SDK Dumping
-    - 2) Added Option to use pointer decryption
-    - 3) Added Support for PUBG New State Mobile
-    - 4) Added GWorld and GName Workaround for PUBGM Series
-    - 5) Offsets are not upto date with latest game versions so please update them yourself
-- v0.19:
-    - 1) Fixed Object Dumping issue with PUBG CN
-    - 2) Improved String Dumping Output
-    - 3) Fixed Verbose Output Not Showing while String Dumping
-    - 4) General Improvements to SDK Dumping
-- v0.18:
-    - 1) Fixed Dumping issue with 64bit PUBG CN
-    - 2) Fixed Another Issue with String Dumping
-- v0.17:
-    - 1) Fixed Crash with Deref Options
-    - 2) Fixed Issue with Wide String Dumping
-- v0.16: Fixed Dumping issue with 64bit PUBG Lite
-- v0.15:
-    - 1) Fixed Struct Property Dumping
-    - 2) Experimental Wide String Support Added for UE 4.23+ Mode
-- v0.14: Fixed Support for Battlegrounds Mobile India
-- v0.13:
-    - 1) Fixed String Reading for Objects for UE 4.23+ Mode
-    - 2) Fixed SDK Dumping Issue Due to Invalid UStruct
-    - 3) Added Offset Support for Fortnite Mobile
-- v0.12:
-    - 1) Fixed Offsets for UE 4.23+ Mode
-    - 2) Fixed SDK Dumping for UE 4.23+ Mode
-    - 3) Fixed String Dumping for UE 4.23+ Mode
-    - 4) Added Offset Support for Apex Legends Mobile
-    - 5) Added Option to Detour or De-Reference GNames, GUObject Addresses
-    - 6) Added Option to See Verbose Output of String, Object and SDK Dumping
-- v0.11: Fixed Dumping issue with 64bit PUBG Lite
-- v0.10:
-    - 1) Added Option to Print Actors of Main Level(Use new Option: --actors)
-    - 2) Support for PUBG CN(GFP) Fixed(Tested on GFP v1.9.10)
-    - 3) Fixed Some Offsets Issues due to Modified UE4 Versions
-    - 4) Offsets System Updated to Work with Other games, other then PUBG
-- v0.9: Fixed Dumping issue with 64bit PUBG
-- v0.8: Fixed 64bit Support for Latest PUBG Version
-- v0.7: Fixed Object Dumping issue for PUBG CN(Tested on GFP v1.8.10)
-- v0.6:
-    - 1) Added Support for UE 4.23+ Games for Strings and Objects(Use new Option: --newue)
-    - 2) Added 64bit Offsets to Fix 64bit Support
-    - 3) Updated SDK Generation Method for Faster Dumping
-    - 4) Short Options has been remove due to conflict with new options
-- v0.5: Added Support to Resolve Functions
-- v0.4:
-    - 1) Expanded 64bit Support,
-    - 2) Fixed 64bit Library Rebuilding Not Working
-    - 3) Added New Elf Dump Fix for 64bit Library
-    - 4) Added Option to Dump SDK with GWorld
-    - 5) Updated Usage Text
-- v0.3:
-    - 1) Fix Object Iteration Issue during Dumping SDK 
-    - 2) Added Support to Resolve Arrays, Sets and Maps Structure
-- v0.2: Experimental 64bit Support Added
-- v0.1: First Release
+## BGMI Quick Start
+This local copy is prepared for BGMI (`com.pubg.imobile`) with one reusable binary. Offsets are passed through the CLI by `push_ue4dumper.bat`, so when BGMI updates you only need to edit the offset variables in the batch file, not rebuild the dumper.
+
+Current BGMI offsets are configured in `push_ue4dumper.bat`:
+
+```bat
+set "GNAME=0x9BFB714"
+set "GUOBJ=0x9DE3114"
+set "GWORLD=0x9FEB9D0"
+```
+
+Run:
+
+```bat
+push_ue4dumper.bat
+```
+
+Menu options:
+
+```text
+1. SDK with GUObject (--sdku)
+2. Objects list (--objs)
+3. Strings (--strings)
+4. SDK with GWorld (--sdkw)
+5. Actors (--actors)
+6. libUE4.so only (--lib)
+```
+
+Output path:
+
+```text
+/sdcard/UE4Dumper
+```
+
+Main SDK output:
+
+```text
+/sdcard/UE4Dumper/SDK.txt
+```
+
+Manual BGMI CLI examples:
+
+```sh
+/data/local/tmp/ue4dumper --package com.pubg.imobile --output /sdcard/UE4Dumper --sdku --gname 0x9BFB714 --guobj 0x9DE3114
+/data/local/tmp/ue4dumper --package com.pubg.imobile --output /sdcard/UE4Dumper --sdkw --gname 0x9BFB714 --guobj 0x9DE3114 --gworld 0x9FEB9D0
+/data/local/tmp/ue4dumper --package com.pubg.imobile --output /sdcard/UE4Dumper --actors --gname 0x9BFB714 --gworld 0x9FEB9D0
+```
+
+BGMI notes:
+
+- `--sdku` is the recommended full SDK dump mode.
+- `--sdkw` uses GWorld and also accepts `--guobj` as a fallback if GWorld produces no SDK items.
+- `--gname 0x9BFB714` is the raw BGMI GNames source. The dumper resolves the working BGMI name table internally with the required pointer chain.
+- `--gworld 0x9FEB9D0` is the final CLI offset for `0x9FEB994 + 0x3C`.
 
 ## Features
 - No need of Ptrace
 - Bypass Anti Debugging
 - Dumping of Lib from Memory of Game
 - Fix and Regenerate So(Elf) File from Dump
-- Dumping of Game Structure SDK file(Need to Find Pointers Manually)
+- Dumping of Game Structure SDK file(Need to Find Pointers Manually; BGMI offsets are editable in `push_ue4dumper.bat`)
 - Support Fast Dumping(Might Miss some data)
 - Support SDK Dumping for UE4 Based Android Games
 - Tested on 32bit and 64bit PUBG Mobile Series
@@ -128,14 +117,15 @@ Unreal Engine 4 Dumper for Android Devices, Dump Lib libUE4.so from Memory of Ga
     --verbose(Optional)                 Show Verbose Output of Dumping
     --derefgname(Optional) <true/false> De-Reference GNames Address(Default: true)
     --derefguobj(Optional) <true/false> De-Reference GUObject Address(Default: false)
-    --package <packageName>             Package Name of App(Default: com.tencent.ig)
-    --output <outputPath>               File Output path
+    --package <packageName>             Package Name of App(Default: com.pubg.imobile)
+    --output <outputPath>               File Output path(Default: /sdcard/UE4Dumper)
     --help                              Display this information
 	```
 	
 ## How to Build
 - Clone this repo
 - Install Android NDK, if not already.
+- On Windows, run `Build.bat`.
 - Open Shell/CMD in Project Folder
 - Drag ndk-build from NDK in Shell or CMD and then Execute
 - Output will be in libs Folder.
@@ -145,5 +135,3 @@ Unreal Engine 4 Dumper for Android Devices, Dump Lib libUE4.so from Memory of Ga
 - [elf-dump-fix](https://github.com/maiyao1988/elf-dump-fix): 64bit So(Elf) Rebuilding
 - [UnrealDumper-4.25](https://github.com/guttir14/UnrealDumper-4.25): UE 4.25+ Support
 
-## Technlogy Communication
-> Email: patel.kuldip91@gmail.com
