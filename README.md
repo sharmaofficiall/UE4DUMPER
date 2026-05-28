@@ -82,7 +82,7 @@ BGMI notes:
 - Give it executable permission with either 'chmod +x ue4dumper' or 'chmod 755 ue4dumper'
 - Run './ue4dumper -h' For Usage Help
 	```
-    UE4Dumper v0.21 <==> Made By KMODs(kp7742)
+    UE4Dumper v0.21 <==> Made By Sharmamod
     Usage: ./ue4dumper <option(s)>
     Dump Lib libUE4.so from Memory of Game Process and Generate structure SDK for UE4 Engine
     Tested on PUBG Mobile Series and Other UE4 Based Games
