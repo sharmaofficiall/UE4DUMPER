@@ -35,7 +35,7 @@ set "FLAGS="
 if "%CHOICE%"=="1" set "FLAGS=--sdku --gname %GNAME% --guobj %GUOBJ%"
 if "%CHOICE%"=="2" set "FLAGS=--objs --gname %GNAME% --guobj %GUOBJ%"
 if "%CHOICE%"=="3" set "FLAGS=--strings --gname %GNAME%"
-if "%CHOICE%"=="4" set "FLAGS=--sdkw --gname %GNAME% --gworld %GWORLD%"
+if "%CHOICE%"=="4" set "FLAGS=--sdkw --gname %GNAME% --guobj %GUOBJ% --gworld %GWORLD%"
 if "%CHOICE%"=="5" set "FLAGS=--actors --gname %GNAME% --gworld %GWORLD%"
 if "%CHOICE%"=="6" set "FLAGS=--lib"
 
