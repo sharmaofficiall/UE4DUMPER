@@ -660,6 +660,10 @@ static kaddr ReadPtrSafe(kaddr address) {
     return Read<kaddr>(address, 0);
 }
 
+static int ReadIntSafe(kaddr address, int def = -1) {
+    return Read<int>(address, def);
+}
+
 static bool LooksAddress(kaddr address) {
 #if defined(__LP64__)
     return address > 0x10000 && address < 0x0000008000000000;
@@ -668,21 +672,82 @@ static bool LooksAddress(kaddr address) {
 #endif
 }
 
-static bool IsWorldCandidate(kaddr world) {
+struct GWorldLayout {
+    kaddr World = 0;
+    kaddr Level = 0;
+    kaddr ActorList = 0;
+    int ActorCount = 0;
+    int ValidActorSamples = 0;
+    kaddr WorldToLevel = 0;
+    kaddr LevelToActors = 0;
+    const char *Source = "";
+};
+
+static bool IsReasonableCount(int count) {
+    return count > 0 && count < 300000;
+}
+
+static int CountValidActorSamples(kaddr actorList, int actorsCount) {
+    if (!LooksAddress(actorList) || actorsCount <= 0) {
+        return 0;
+    }
+
+    int valid = 0;
+    int maxSamples = actorsCount < 32 ? actorsCount : 32;
+    for (int i = 0; i < maxSamples; i++) {
+        kaddr actor = ReadPtrSafe(actorList + (i * Offsets::PointerSize));
+        if (UObject::isValid(actor) &&
+            !UObject::getName(actor).empty() &&
+            !UObject::getClassName(actor).empty()) {
+            valid++;
+        }
+    }
+    return valid;
+}
+
+static bool TryFindWorldLayout(kaddr world, const char *source, GWorldLayout *out) {
     if (!LooksAddress(world) || !UObject::isValid(world)) {
         return false;
     }
 
-    kaddr level = ReadPtrSafe(world + Offsets::UWorldToPersistentLevel);
-    if (!LooksAddress(level)) {
+    GWorldLayout best{};
+
+    for (kaddr worldOff = 0x0; worldOff <= 0x140; worldOff += 0x4) {
+        kaddr level = ReadPtrSafe(world + worldOff);
+        if (!LooksAddress(level)) {
+            continue;
+        }
+
+        for (kaddr actorsOff = 0x0; actorsOff <= 0x300; actorsOff += 0x4) {
+            kaddr actorList = ReadPtrSafe(level + actorsOff);
+            int actorsCount = ReadIntSafe(level + actorsOff + 0x4);
+            if (!LooksAddress(actorList) || !IsReasonableCount(actorsCount)) {
+                continue;
+            }
+
+            int validSamples = CountValidActorSamples(actorList, actorsCount);
+            if (validSamples <= 0) {
+                continue;
+            }
+
+            if (validSamples > best.ValidActorSamples) {
+                best.World = world;
+                best.Level = level;
+                best.ActorList = actorList;
+                best.ActorCount = actorsCount;
+                best.ValidActorSamples = validSamples;
+                best.WorldToLevel = worldOff;
+                best.LevelToActors = actorsOff;
+                best.Source = source;
+            }
+        }
+    }
+
+    if (best.ValidActorSamples <= 0) {
         return false;
     }
 
-    int actorsCount = Read<int>(level + Offsets::ULevelToAActorsCount, -1);
-    if (actorsCount < 0 || actorsCount > 300000) {
-        return false;
-    }
-
+    *out = best;
     return true;
 }
 
@@ -702,63 +767,112 @@ static kaddr ResolveGWorldSlot() {
     return UWorld::getGWorld();
 }
 
-static kaddr ResolveGWorldObject() {
+static bool ResolveGWorldLayout(GWorldLayout *out) {
     kaddr slot = ResolveGWorldSlot();
     kaddr p0 = ReadPtrSafe(slot);
     kaddr p1 = ReadPtrSafe(p0);
+    kaddr rawSlot = (slot > 0x3C) ? (slot - 0x3C) : slot;
+    kaddr rawP0 = ReadPtrSafe(rawSlot);
 
-    const int candidateCount = 8;
+    const int candidateCount = 14;
     const char *labels[candidateCount] = {
             "slot",
             "[slot]",
             "[[slot]]",
+            "slot-0x3C",
+            "[slot-0x3C]",
+            "[slot-0x3C]+0x3C",
+            "[[slot-0x3C]+0x3C]",
             "[slot+0x3C]",
             "[slot+0x7C]",
             "[slot+0x80]",
             "[[slot]+0x0]",
             "[[slot]+0x4]",
+            "[[slot]+0x7C]",
+            "[[slot]+0x80]",
     };
     kaddr candidates[candidateCount] = {
             slot,
             p0,
             p1,
+            rawSlot,
+            rawP0,
+            rawP0 + 0x3C,
+            ReadPtrSafe(rawP0 + 0x3C),
             ReadPtrSafe(slot + 0x3C),
             ReadPtrSafe(slot + 0x7C),
             ReadPtrSafe(slot + 0x80),
             ReadPtrSafe(p0 + 0x0),
             ReadPtrSafe(p0 + 0x4),
+            ReadPtrSafe(p0 + 0x7C),
+            ReadPtrSafe(p0 + 0x80),
     };
 
+    GWorldLayout best{};
     for (int i = 0; i < candidateCount; i++) {
         if (isBGMIndia()) {
             LogGWorldCandidate(labels[i], candidates[i]);
         }
-        if (IsWorldCandidate(candidates[i])) {
-            cout << "Selected GWorld candidate: " << labels[i] << endl;
-            return candidates[i];
+
+        GWorldLayout layout{};
+        if (TryFindWorldLayout(candidates[i], labels[i], &layout)) {
+            if (layout.ValidActorSamples > best.ValidActorSamples) {
+                best = layout;
+            }
         }
     }
 
-    return p0;
+    if (best.ValidActorSamples > 0) {
+        cout << "Selected GWorld candidate: " << best.Source
+             << " | WorldToLevel: 0x" << setbase(16) << best.WorldToLevel
+             << " | LevelToActors: 0x" << best.LevelToActors
+             << setbase(10) << " | ValidActorSamples: " << best.ValidActorSamples << endl;
+        *out = best;
+        return true;
+    }
+
+    out->World = p0;
+    out->Level = 0;
+    out->ActorList = 0;
+    out->ActorCount = 0;
+    out->Source = "[slot]";
+    return false;
+}
+
+static void DumpSDKWithGUObjectFallback(const string& out) {
+    if (Offsets::GUObjectArray < 1) {
+        cout << "GWorld produced no SDK items and --guobj was not provided, cannot fallback." << endl;
+        return;
+    }
+
+    cout << "GWorld produced no SDK items, falling back to GUObject SDK dump." << endl;
+    DumpSDK(out);
 }
 
 void DumpSDKW(const string& out) {
+    uint32 beforeCount = classCount;
     ofstream sdk(out + "/SDK.txt", ofstream::out);
     if (sdk.is_open()) {
         cout << "Dumping SDK List" << endl;
         clock_t begin = clock();
         kaddr gworldSlot = ResolveGWorldSlot();
-        kaddr gworld = ResolveGWorldObject();
+        GWorldLayout layout{};
+        bool hasLayout = ResolveGWorldLayout(&layout);
+        kaddr gworld = layout.World;
         cout << "GWorldSlot: " << setbase(16) << gworldSlot << " | UWorld: " << gworld
              << setbase(10) << " | Name: " << UObject::getName(gworld) << endl;
-        if (UObject::isValid(gworld)) {
+        if (hasLayout) {
             //Iterate World
-            writeStruct(sdk, UObject::getClass(gworld));
+            if (UObject::isValid(gworld)) {
+                writeStruct(sdk, UObject::getClass(gworld));
+            }
             //Iterate Entities
-            kaddr level = getPtr(gworld + Offsets::UWorldToPersistentLevel);
-            kaddr actorList = getPtr(level + Offsets::ULevelToAActors);
-            int actorsCount = Read<int>(level + Offsets::ULevelToAActorsCount);
+            kaddr level = layout.Level;
+            kaddr actorList = layout.ActorList;
+            int actorsCount = layout.ActorCount;
             cout << "Level: " << setbase(16) << level << " | ActorList: " << actorList
+                 << " | WorldToLevel: 0x" << layout.WorldToLevel
+                 << " | LevelToActors: 0x" << layout.LevelToActors
                  << setbase(10) << " | ActorCount: " << actorsCount << endl;
             for (int i = 0; i < actorsCount; i++) {
                 kaddr actor = getPtr(actorList + (i * Offsets::PointerSize));
@@ -773,6 +887,10 @@ void DumpSDKW(const string& out) {
         clock_t end = clock();
         double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
         cout << classCount << " Items Dumped in SDK in " << elapsed_secs << "S" << endl;
+    }
+
+    if (classCount == beforeCount) {
+        DumpSDKWithGUObjectFallback(out);
     }
 }
 
@@ -838,7 +956,9 @@ void TestDump(kaddr uobj) {
 void DumpActors() {
     ///Dump All Actors
     kaddr gworld = ResolveGWorldSlot();
-    kaddr world = ResolveGWorldObject();
+    GWorldLayout layout{};
+    bool hasLayout = ResolveGWorldLayout(&layout);
+    kaddr world = layout.World;
 
     // kaddr vtable = getPtr(world);
     //
@@ -852,21 +972,24 @@ void DumpActors() {
     cout << "UWorld: " << setbase(16) << gworld << " | World: " << world << " | Name: "
          << UObject::getName(world) << endl;
 
-    if (!UObject::isValid(world)) {
+    if (!hasLayout) {
         cout << "Invalid UWorld. Check --gworld; for BGMI use the final direct offset 0x9FEB9D0." << endl;
         return;
     }
 
     // HexDump(world, 40, 0x0);
 
-    kaddr level = getPtr(world + Offsets::UWorldToPersistentLevel);
+    kaddr level = layout.Level;
     cout << "Level: " << setbase(16) << level << " | Name: " << UObject::getName(level) << endl;
 
     //HexDump(level + 0x90, 60, 0x90);
 
-    kaddr actorList = getPtr(level + Offsets::ULevelToAActors);
-    int actorsCount = Read<int>(level + Offsets::ULevelToAActorsCount);
-    cout << "ActorList: " << setbase(16) << actorList << ", ActorCount: " << setbase(10)
+    kaddr actorList = layout.ActorList;
+    int actorsCount = layout.ActorCount;
+    cout << "ActorList: " << setbase(16) << actorList
+         << ", WorldToLevel: 0x" << layout.WorldToLevel
+         << ", LevelToActors: 0x" << layout.LevelToActors
+         << ", ActorCount: " << setbase(10)
          << actorsCount << "\n" << endl;
 
     for (int i = 0; i < actorsCount; i++) {
